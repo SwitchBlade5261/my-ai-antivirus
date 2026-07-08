@@ -4,29 +4,36 @@ import requests
 
 app = FastAPI()
 
-# Example list of known malicious IPs
-KNOWN_BAD_IPS = ["185.220.101.5"] 
+# SHA-256 fingerprint of the EICAR test string
+BLACK_LISTED_HASHES = [
+    "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f"
+]
 
-class NetworkAlert(pydantic.BaseModel):
-    process_name: str
-    remote_ip: str
+class FileCheck(pydantic.BaseModel):
+    file_path: str
+    file_hash: str
 
 @app.get("/")
 def home():
-    return {"status": "Cloud Brain is Online"}
+    return {"status": "Dual Threat Engine Online"}
 
-@app.post("/analyze")
-def analyze_traffic(alert: NetworkAlert):
-    # If it matches a known bad IP, order a block
-    if alert.remote_ip in KNOWN_BAD_IPS:
-        return {"status": "BLOCK", "reason": "Known malicious server flagged by AI logic."}
+@app.post("/analyze-file")
+def analyze_file(data: FileCheck):
+    # Check if the file matches our blacklisted threat signatures
+    if data.file_hash in BLACK_LISTED_HASHES:
+        try:
+            # Gather background location info for the forensic report
+            geo_req = requests.get("https://ipapi.co", timeout=3).json()
+            city = geo_req.get("city", "Unknown City")
+            country = geo_req.get("country_name", "Unknown Country")
+        except:
+            city, country = "Unknown City", "Unknown Country"
 
-    # Pull live threat intelligence data about where the IP is hosted
-    try:
-        geo_data = requests.get(f"https://ipapi.co{alert.remote_ip}/json/", timeout=3).json()
-        isp = geo_data.get("org", "Unknown ISP")
-        country = geo_data.get("country_name", "Unknown Country")
-    except:
-        isp, country = "Unknown ISP", "Unknown Country"
-
-    return {"status": "ALLOW", "isp": isp, "country": country}
+        return {
+            "status": "BLOCK",
+            "reason": "File signature matches a known malicious campaign template.",
+            "city": city,
+            "country": country
+        }
+    
+    return {"status": "ALLOW"}
